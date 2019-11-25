@@ -1,4 +1,5 @@
 ;; (load (compile-file "stocksim.lisp"))
+(declaim (optimize (debug 3)))
 
 (defun string-split (string &key (delimiter #\space) (convert-num-values? nil))
   "Split string into substrings delimited by delimiter"
@@ -31,8 +32,8 @@
 	 until (null line)
 	 collect (string-split line :delimiter #\, :convert-num-values? t))))
 
-(defparameter *bank* 10000) ;; Start out with 10k$
-(defparameter *irate* 3) ;; Interest rate in %
+(defparameter *bank* 10000.00) ;; Start out with 10k$
+(defparameter *irate* 3.0) ;; Interest rate in %
 (defparameter *data* (load-stocks))
 (defparameter *sym.shares* (loop for sym in (cdr (pop *data*)) collect (cons (read-from-string sym) 0)))
 (defparameter *vbank* *bank*)
@@ -41,7 +42,7 @@
   (prog (wkn val rec $ sym skip)
 	(setf wkn 0)
 	loop 
-	(setf $ 0 rec (nth wkn *data*) skip 1)
+	(setf $ 0.0 rec (nth wkn *data*) skip 1)
 	(when (null rec) 
 	  (format t "~%~%*****************~%~%We're up to today! You can't go any father. We'll hang out at the last datapoint.~%You can use reset (r r r) to reset to the beginning of time.~%~%")
 	  (setf rec (car (last *data*))))
@@ -67,11 +68,10 @@
 		      "<tbd>" sym sval "<tbd>")
 	      )
 	(format t "~%~%(Annoyingly, commands always have 3 parts. If you leave one of the three out, it'll wait for more input!)~%Enter a command from:  [wait] w w w, [fastfwd] f #wks wks, [buy] b sym #, [sell] s sym #, [reset] r r r :~%")
-	(let ((cmd (read))
-	      (arg1 (read))
-	      (arg2 (read))
-	      )
-	  (unless 
+	(multiple-value-bind
+	 (cmd arg1 arg2)
+	 (values (read) (read) (read))
+	 (unless 
 	      (ignore-errors
 	       (case cmd
 		     ((f fwd ff) 
@@ -98,13 +98,23 @@
 		     ((r reset) 
 		      (setf *bank* 10000 *vbank* *bank* wkn 0)
 		      (loop for elt in *sym.shares* do (setf (cdr elt) 0.0)))
+		     ((q quit) (return nil))
 		     ((w wait))
 		     (t (print 'hunh?)))
 	       t) 
 	    (format t "~%~%????????? Something went wrong !!!!!!!!!!~%~%")
 	    ))
-	(incf *bank* (* skip (/ (* *bank* (/ *irate* 100.0)) 50.0))) ;; interest 
-	(incf *vbank* (* skip (/ (* *vbank* (/ *irate* 100.0)) 50.0))) ;; interest on virtual bank
+	;; Compounded daily, but we're skipping by weeks!
+	(let* ((k 365.0) ;; We're compounding daily
+	       (kt (* k (/ (* skip 7.0d0) 365.0d0))) ;; Running 7 days at a time (times the skip)
+	       (r/k (/ (/ *irate* 100.0d0) k))
+	       (1+r/k (+ 1.0d0 r/k))
+	       (1+r/k^kt (expt 1+r/k kt))
+	       (final (* *bank* 1+r/k^kt)))
+	  ;;(print `(k ,k kt ,kt r/k ,r/k 1+r/k ,1+r/k 1+r/k^kt ,1+r/k^kt final ,final))
+	  (setf *bank* final)
+	  (setf *vbank* (* *vbank* 1+r/k^kt))
+	  )
 	(incf wkn skip)
 	(go loop)))
 
