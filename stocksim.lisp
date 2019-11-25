@@ -128,13 +128,16 @@
 ;;; This always returns three values: the command (a symbol), 
 ;;; and then in some cases a symbol and a number of shares.
 
-(defun get-command ()
+(defun get-command (&aux temp)
   (let* ((cmd (string-trim " " (fast-substitute (read-line t nil nil))))
 	 (p (mapcar #'(lambda (w) (string-trim ",./;: " w)) (string-split cmd :delimiter #\space)))
 	 (cmd (read-from-string (pop p)))
 	 (arg1 (when p (read-from-string (pop p))))
 	 (arg2 (when p (read-from-string (pop p))))
 	 )
+    ;; Flip backwards args
+    (when (and (not (null arg2)) (not (numberp arg2)) (numberp arg1))
+      (setf temp arg1 arg1 arg2 arg2 temp))
     (print (list cmd arg1 arg2))
     (values cmd arg1 arg2)))
 
